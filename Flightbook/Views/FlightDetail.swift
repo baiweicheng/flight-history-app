@@ -23,11 +23,11 @@ struct FlightDetail: View {
                     Section { RouteMap(flights: [flight], state: map, interactive: false).frame(height: 225).listRowInsets(EdgeInsets()) }
                     Section {
                         LabeledContent("Route distance", value: unit.format(flight.distanceKM))
-                        LabeledContent("Estimated airborne time", value: "~ " + durationText(flight.duration.value))
+                        LabeledContent(flight.durationLabel, value: (flight.duration.kind == .estimated ? "~ " : "") + durationText(flight.duration.value))
                         LabeledContent("Departure date", value: flight.departure.formatted)
                         if let airline = flight.airline { LabeledContent("Airline", value: airline) }
                         if let number = flight.flightNumber { LabeledContent("Flight", value: number) }
-                    } footer: { Text("Great-circle airport distance. Hours are a planning estimate, excluding taxi and layovers.\nModel: \(flight.duration.version). Departure is a local calendar date.") }
+                    } footer: { Text("Great-circle airport distance. Airborne time excludes taxi and layovers.\nSource: \(flight.duration.provider), \(flight.duration.version). \(flight.duration.kind == .estimated ? "This is a planning estimate. " : "")Departure is a local calendar date.") }
                     if let notes = flight.notes { Section("Notes") { Text(notes) } }
                     Section {
                         Button("Add return flight", systemImage: "arrow.uturn.backward") { returning = true }.frame(minHeight: 44)

@@ -1,5 +1,23 @@
 import Foundation
 
+public enum FlightCalendar {
+    public static var utc: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!; calendar.locale = .current
+        return calendar
+    }
+    public static var current: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current; calendar.locale = .current
+        return calendar
+    }
+}
+
+func validTimestamp(_ date: Date) -> Bool {
+    let seconds = date.timeIntervalSince1970
+    return seconds.isFinite && (-62_135_596_800...253_402_300_799).contains(seconds)
+}
+
 /// The departure airport's calendar date, independent of UTC or the device's time zone.
 public struct LocalDate: Codable, Hashable, Comparable, Sendable, CustomStringConvertible {
     public let year: Int
@@ -17,7 +35,7 @@ public struct LocalDate: Codable, Hashable, Comparable, Sendable, CustomStringCo
         self.year = year; self.month = month; self.day = day
     }
 
-    public init(_ date: Date, calendar: Calendar = .current) {
+    public init(_ date: Date, calendar: Calendar = FlightCalendar.current) {
         year = calendar.component(.year, from: date)
         month = calendar.component(.month, from: date)
         day = calendar.component(.day, from: date)
@@ -33,9 +51,11 @@ public struct LocalDate: Codable, Hashable, Comparable, Sendable, CustomStringCo
     public var description: String { String(format: "%04d-%02d-%02d", year, month, day) }
     public static func < (lhs: Self, rhs: Self) -> Bool { lhs.description < rhs.description }
     public var pickerDate: Date {
-        Calendar.current.date(from: DateComponents(year: year, month: month, day: day, hour: 12))!
+        FlightCalendar.utc.date(from: DateComponents(year: year, month: month, day: day, hour: 12))!
     }
-    public var formatted: String { pickerDate.formatted(date: .abbreviated, time: .omitted) }
+    public var formatted: String {
+        pickerDate.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted, calendar: FlightCalendar.utc, timeZone: TimeZone(secondsFromGMT: 0)!))
+    }
     public init(from decoder: Decoder) throws { try self.init(iso: decoder.singleValueContainer().decode(String.self)) }
     public func encode(to encoder: Encoder) throws { var c = encoder.singleValueContainer(); try c.encode(description) }
 }
@@ -97,11 +117,19 @@ public struct Measurement: Codable, Hashable, Sendable, Identifiable {
         self.provider = provider; self.version = version; calculatedAt = at
     }
     public func validate() throws {
-        guard value.isFinite, value >= 0, !provider.isEmpty, !version.isEmpty,
-              ["km", "minutes"].contains(unit), calculatedAt.timeIntervalSince1970.isFinite,
+        guard value.isFinite, value >= 0, value <= (unit == "minutes" ? 10_080 : 100_000_000), !provider.isEmpty, !version.isEmpty,
+              ["km", "minutes"].contains(unit), validTimestamp(calculatedAt),
               (unit == "km" ? [.airportToAirport, .aircraftTrack].contains(basis) : [.airborne, .gateToGate].contains(basis))
         else { throw FlightError.invalidMeasurement }
     }
+}
+
+public struct MetricRevision: Codable, Hashable, Sendable {
+    public var origin: Airport
+    public var destination: Airport
+    public var archivedAt: Date
+    public var measurements: [Measurement]
+    public var corrections: [Measurement]
 }
 
 public struct Flight: Codable, Hashable, Identifiable, Sendable {
@@ -116,6 +144,7 @@ public struct Flight: Codable, Hashable, Identifiable, Sendable {
     public var updatedAt: Date
     public var measurements: [Measurement]
     public var corrections: [Measurement]
+    public var metricHistory: [MetricRevision]?
 
     public init(id: UUID = UUID(), origin: Airport, destination: Airport, departure: LocalDate,
                 airline: String? = nil, flightNumber: String? = nil, notes: String? = nil, now: Date = .now) {
@@ -131,13 +160,34 @@ public struct Flight: Codable, Hashable, Identifiable, Sendable {
         ?? FlightMetrics.measurements(origin: origin, destination: destination, at: updatedAt)[1]
     }
     public var routeKey: String { [origin.id, destination.id].sorted().joined(separator: ":") }
+    public var durationLabel: String {
+        switch duration.kind {
+        case .estimated: "Estimated airborne time"
+        case .userSupplied: "Your airborne time"
+        case .observed: "Observed airborne time"
+        case .scheduled: "Scheduled airborne time"
+        case .calculated: "Calculated airborne time"
+        }
+    }
     public var routeLabel: String { "\(origin.code) → \(destination.code)" }
     public func validate() throws {
         try origin.validate(); try destination.validate()
         guard origin.id != destination.id else { throw FlightError.sameAirport }
-        guard createdAt.timeIntervalSince1970.isFinite, updatedAt.timeIntervalSince1970.isFinite else { throw FlightError.invalidBackup }
+        guard validTimestamp(createdAt), validTimestamp(updatedAt) else { throw FlightError.invalidBackup }
         for value in measurements + corrections { try value.validate() }
+        for revision in metricHistory ?? [] {
+            try revision.origin.validate(); try revision.destination.validate()
+            guard validTimestamp(revision.archivedAt) else { throw FlightError.invalidBackup }
+            for value in revision.measurements + revision.corrections { try value.validate() }
+        }
         guard Set((measurements + corrections).map(\.id)).count == measurements.count + corrections.count else { throw FlightError.invalidBackup }
+    }
+    public mutating func reviseRoute(origin: Airport, destination: Airport, at: Date = .now) {
+        guard self.origin.id != origin.id || self.destination.id != destination.id else { return }
+        let revision = MetricRevision(origin: self.origin, destination: self.destination, archivedAt: at, measurements: measurements, corrections: corrections)
+        metricHistory = (metricHistory ?? []) + [revision]
+        measurements = FlightMetrics.measurements(origin: origin, destination: destination, at: at)
+        corrections = []; self.origin = origin; self.destination = destination; updatedAt = at
     }
     public func likelyDuplicate(of other: Flight) -> Bool {
         id != other.id && origin.id == other.origin.id && destination.id == other.destination.id && departure == other.departure

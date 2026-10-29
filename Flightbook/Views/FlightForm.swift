@@ -7,7 +7,7 @@ struct FlightForm: View {
     var returnFrom: Flight?
     @State private var origin: Airport?
     @State private var destination: Airport?
-    @State private var date = Date.now
+    @State private var date = LocalDate(.now).pickerDate
     @State private var airline = ""
     @State private var number = ""
     @State private var notes = ""
@@ -16,18 +16,18 @@ struct FlightForm: View {
     @State private var discard = false
     @State private var savedNotice = false
     @State private var initialized = false
-    @AppStorage("distanceUnit") private var unitName = DistanceUnit.miles.rawValue
+    @AppStorage("distanceUnit", store: Preferences.defaults) private var unitName = DistanceUnit.miles.rawValue
     enum AirportField: String, Identifiable { case origin, destination; var id: String { rawValue } }
     private var unit: DistanceUnit { DistanceUnit(rawValue: unitName) ?? .miles }
     private var valid: Bool { origin != nil && destination != nil && origin?.id != destination?.id }
     private var draft: Flight? {
         guard let origin, let destination else { return nil }
-        return Flight(id: existing?.id ?? UUID(), origin: origin, destination: destination, departure: LocalDate(date))
+        return Flight(id: existing?.id ?? UUID(), origin: origin, destination: destination, departure: LocalDate(date, calendar: FlightCalendar.utc))
     }
     private var duplicate: Bool { draft.map { d in store.flights.contains { d.likelyDuplicate(of: $0) } } ?? false }
     private var dirty: Bool {
         if let existing {
-            return origin != existing.origin || destination != existing.destination || LocalDate(date) != existing.departure
+            return origin != existing.origin || destination != existing.destination || LocalDate(date, calendar: FlightCalendar.utc) != existing.departure
                 || airline != (existing.airline ?? "") || number != (existing.flightNumber ?? "") || notes != (existing.notes ?? "")
         }
         return origin != nil || destination != nil || !airline.isEmpty || !number.isEmpty || !notes.isEmpty
@@ -41,7 +41,8 @@ struct FlightForm: View {
                     airportButton("To", airport: destination, field: .destination)
                 } header: { Text("Three details. One more journey remembered.").textCase(nil) }
                 Section {
-                    DatePicker("Departure date", selection: $date, in: ...Date.now, displayedComponents: .date)
+                    DatePicker("Departure date", selection: $date, in: ...LocalDate(.now).pickerDate, displayedComponents: .date)
+                        .environment(\.calendar, FlightCalendar.utc).environment(\.timeZone, TimeZone(secondsFromGMT: 0)!)
                         .accessibilityIdentifier("departureDate")
                 } footer: { Text(returnFrom != nil ? "Choose the return flight’s own local departure date." : "Use the local calendar date where your flight departed.") }
                 if let origin, let destination, valid {
@@ -95,7 +96,7 @@ struct FlightForm: View {
                     if let f = existing {
                         origin = f.origin; destination = f.destination; date = f.departure.pickerDate
                         airline = f.airline ?? ""; number = f.flightNumber ?? ""; notes = f.notes ?? ""
-                    } else if let f = returnFrom { origin = f.destination; destination = f.origin; date = .now }
+                    } else if let f = returnFrom { origin = f.destination; destination = f.origin; date = LocalDate(.now).pickerDate }
                 }
         }.tint(Palette.accent)
     }
@@ -116,13 +117,9 @@ struct FlightForm: View {
     private func save(another: Bool) {
         guard let origin, let destination, valid else { return }
         do {
-            var f = existing ?? Flight(origin: origin, destination: destination, departure: LocalDate(date))
-            if f.origin.id != origin.id || f.destination.id != destination.id {
-                f.measurements = FlightMetrics.measurements(origin: origin, destination: destination, at: .now)
-                // Corrections belong to the old route and must never be silently reused for a different one.
-                f.corrections = []
-            }
-            f.origin = origin; f.destination = destination; f.departure = LocalDate(date)
+            var f = existing ?? Flight(origin: origin, destination: destination, departure: LocalDate(date, calendar: FlightCalendar.utc))
+            f.reviseRoute(origin: origin, destination: destination)
+            f.origin = origin; f.destination = destination; f.departure = LocalDate(date, calendar: FlightCalendar.utc)
             func optional(_ text: String) -> String? { let t = text.trimmingCharacters(in: .whitespacesAndNewlines); return t.isEmpty ? nil : t }
             f.airline = optional(airline); f.flightNumber = optional(number); f.notes = optional(notes); f.updatedAt = .now
             try store.save(f)

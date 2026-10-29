@@ -1,9 +1,10 @@
 import SwiftUI
 
-@Observable final class AppState {
+@MainActor @Observable final class AppState {
     var tab = 0
     var range: DateRange = .all
-    var annualYear = Calendar.current.component(.year, from: .now)
+    var annualYear = FlightCalendar.current.component(.year, from: .now)
+    var annualVisit = UUID()
     var map = RouteMapState()
 }
 
@@ -12,12 +13,12 @@ struct RootView: View {
     @State private var state = AppState()
     @State private var adding = false
     @State private var settings = false
-    @AppStorage("distanceUnit") private var unitName = DistanceUnit.miles.rawValue
-    @AppStorage("appearance") private var appearance = "System"
+    @AppStorage("distanceUnit", store: Preferences.defaults) private var unitName = DistanceUnit.miles.rawValue
+    @AppStorage("appearance", store: Preferences.defaults) private var appearance = "System"
     private var unit: DistanceUnit { DistanceUnit(rawValue: unitName) ?? .miles }
     private var flights: [Flight] { store.flights.filter { state.range.includes($0.departure) } }
     private var years: [Int] {
-        let current = Calendar.current.component(.year, from: .now)
+        let current = FlightCalendar.current.component(.year, from: .now)
         let oldest = min(current - 10, store.flights.map(\.departure.year).min() ?? current)
         return Array(stride(from: current, through: oldest, by: -1))
     }
@@ -40,14 +41,17 @@ struct RootView: View {
                 NavigationStack {
                     AnnualView(year: $state.annualYear, years: years, unit: unit, add: { adding = true })
                         .toolbar { toolbar }
-                }
+                }.id(state.annualVisit)
             }
         }.tint(Palette.accent)
             .preferredColorScheme(appearance == "System" ? nil : appearance == "Dark" ? .dark : .light)
             .sheet(isPresented: $adding) { FlightForm() }
             .sheet(isPresented: $settings) { SettingsView() }
             .onChange(of: state.tab) { old, new in
-                if new == 3 && old != 3 { state.annualYear = Calendar.current.component(.year, from: .now) }
+                if new == 3 && old != 3 {
+                    state.annualYear = FlightCalendar.current.component(.year, from: .now)
+                    state.annualVisit = UUID()
+                }
             }
             .onChange(of: state.range) { _, _ in state.map.selected = nil; state.map.initialized = false }
             .safeAreaInset(edge: .bottom) {
@@ -107,9 +111,9 @@ struct RootView: View {
                         Text(selected?.label ?? "\(flights.count) flights · \(groups.count) routes").font(.headline)
                         Spacer()
                         if let selected {
-                            NavigationLink("View flights") {
+                            NavigationLink {
                                 FlightDrilldown(title: selected.label, ids: Set(selected.flights.map(\.id)), unit: unit)
-                            }.font(.subheadline).frame(minHeight: 44)
+                            } label: { Text("View flights").font(.subheadline).frame(minHeight: 44).contentShape(Rectangle()) }
                         }
                     }
                     RouteMap(flights: flights, state: state.map).frame(height: 355)
@@ -129,8 +133,9 @@ struct RootView: View {
                                 }.frame(minHeight: 44).contentShape(Rectangle())
                             }.buttonStyle(.plain).accessibilityIdentifier("route-\(group.flights[0].origin.code)-\(group.flights[0].destination.code)")
                             if state.map.selected == group.id {
-                                NavigationLink("View flights") { FlightDrilldown(title: group.label, ids: Set(group.flights.map(\.id)), unit: unit) }
-                                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .trailing)
+                                NavigationLink { FlightDrilldown(title: group.label, ids: Set(group.flights.map(\.id)), unit: unit) } label: {
+                                    Text("View flights").frame(maxWidth: .infinity, minHeight: 44, alignment: .trailing).contentShape(Rectangle())
+                                }
                             }
                             Divider()
                         }

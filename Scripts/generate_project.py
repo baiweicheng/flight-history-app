@@ -38,7 +38,7 @@ for name in targets:
             'INFOPLIST_KEY_UISupportedInterfaceOrientations':'UIInterfaceOrientationPortrait',
             'INFOPLIST_KEY_UIApplicationSceneManifest_Generation':'YES','ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME':'AccentColor',
             'ASSETCATALOG_COMPILER_APPICON_NAME':'AppIcon','MARKETING_VERSION':'1.0','CURRENT_PROJECT_VERSION':'1',
-            'INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace':'YES'})
+            'INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace':'YES','INFOPLIST_KEY_UIFileSharingEnabled':'YES'})
         elif name=='FlightbookTests': settings.update({'TEST_HOST':'$(BUILT_PRODUCTS_DIR)/Flightbook.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Flightbook','BUNDLE_LOADER':'$(TEST_HOST)'})
         else: settings['TEST_TARGET_NAME']=app
         cfg=obj('config'+name+config,'isa = XCBuildConfiguration; buildSettings = { '+' '.join(f'{k} = {q(v)};' for k,v in settings.items())+' }; name = '+config+';'); configs.append(cfg)

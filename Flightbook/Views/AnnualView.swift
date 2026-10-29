@@ -8,7 +8,7 @@ struct AnnualView: View {
     let unit: DistanceUnit
     let add: () -> Void
     @State private var map = RouteMapState()
-    private var currentYear: Int { Calendar.current.component(.year, from: .now) }
+    private var currentYear: Int { FlightCalendar.current.component(.year, from: .now) }
     private var flights: [Flight] { store.flights.filter { $0.departure.year == year } }
     var body: some View {
         ScrollView {
@@ -39,11 +39,11 @@ struct AnnualView: View {
                             BarMark(x: .value("Month", index+1), y: .value("Flights", count))
                                 .foregroundStyle(Palette.accent).cornerRadius(4)
                                 .annotation(position: .top) { if count > 0 { Text(String(count)).font(.caption2) } }
-                                .accessibilityLabel(Calendar.current.monthSymbols[index])
+                                .accessibilityLabel(FlightCalendar.current.monthSymbols[index])
                                 .accessibilityValue("\(count) flights")
                         }.chartXScale(domain: 0.5...12.5)
                             .chartXAxis { AxisMarks(values: [1,4,7,10,12]) { value in
-                                if let month = value.as(Int.self) { AxisValueLabel(Calendar.current.shortMonthSymbols[month-1]) }
+                                if let month = value.as(Int.self) { AxisValueLabel(FlightCalendar.current.shortMonthSymbols[month-1]) }
                             } }
                             .chartYAxis { AxisMarks(values: .automatic(desiredCount: 3)) { value in
                                 if let count = value.as(Int.self) { AxisGridLine(); AxisValueLabel(String(count)) }

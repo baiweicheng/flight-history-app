@@ -32,6 +32,20 @@ final class FlightTests: XCTestCase {
         XCTAssertEqual(FlightMetrics.distance(airport("A", 0, 179), airport("B", 0, -179)), 222.39, accuracy: 0.1)
         XCTAssertEqual(FlightMetrics.distance(airport("A", 0, 0), airport("B", 0, 180)), Double.pi * FlightMetrics.earthRadiusKM, accuracy: 0.001)
     }
+    func testDatePickerCarrierAndFormattingAreTimezoneIndependent() throws {
+        let previous = NSTimeZone.default
+        defer { NSTimeZone.default = previous }
+        let dates = try ["2011-12-30", "2024-02-29", "2026-11-01"].map { try LocalDate(iso: $0) }
+        let labels = dates.map(\.formatted)
+        for zone in ["America/New_York", "Pacific/Kiritimati", "Pacific/Honolulu", "Pacific/Apia"] {
+            NSTimeZone.default = TimeZone(identifier: zone)!
+            for (i, date) in dates.enumerated() {
+                XCTAssertEqual(LocalDate(date.pickerDate, calendar: FlightCalendar.utc), date)
+                XCTAssertEqual(FlightCalendar.utc.component(.hour, from: date.pickerDate), 12)
+                XCTAssertEqual(date.formatted, labels[i], "Display must not normalize a skipped local day")
+            }
+        }
+    }
     func testStatisticsTiesSingleEmptyAndFullPrecision() throws {
         let a = try flight(jfk, lhr), b = try flight(lhr, jfk), c = try flight(nrt, jfk)
         let stats = Statistics([a,b,c])
@@ -79,5 +93,9 @@ final class FlightTests: XCTestCase {
         XCTAssertThrowsError(try invalid.validate())
         let m = Measurement(value: -2, unit: "minutes", basis: .airborne, kind: .estimated, provider: "test", version: "1")
         XCTAssertThrowsError(try m.validate())
+        let huge = Measurement(value: 1e100, unit: "minutes", basis: .airborne, kind: .observed, provider: "test", version: "1")
+        XCTAssertThrowsError(try huge.validate())
+        var f = try flight(jfk, lhr); f.createdAt = Date(timeIntervalSince1970: 1e100)
+        XCTAssertThrowsError(try f.validate())
     }
 }

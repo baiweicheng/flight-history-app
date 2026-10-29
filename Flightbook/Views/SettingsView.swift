@@ -2,14 +2,17 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("distanceUnit") private var unitName = DistanceUnit.miles.rawValue
-    @AppStorage("appearance") private var appearance = "System"
+    @AppStorage("distanceUnit", store: Preferences.defaults) private var unitName = DistanceUnit.miles.rawValue
+    @AppStorage("appearance", store: Preferences.defaults) private var appearance = "System"
     var body: some View {
         NavigationStack {
             Form {
                 Section("Display") {
-                    Picker("Distance", selection: $unitName) { ForEach(DistanceUnit.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) } }
-                    Picker("Appearance", selection: $appearance) { ForEach(["System", "Light", "Dark"], id: \.self) { Text($0) } }
+                    Picker("Distance", selection: $unitName) { ForEach(DistanceUnit.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) } }.accessibilityIdentifier("unitPicker")
+                    Picker("Appearance", selection: $appearance) { ForEach(["System", "Light", "Dark"], id: \.self) { Text($0) } }.accessibilityIdentifier("appearancePicker")
+                }
+                Section("Your data") {
+                    NavigationLink { DataTransferView() } label: { Label("Backup & export", systemImage: "externaldrive") }
                 }
                 Section("About your log") {
                     Text("Flights are stored locally. No account or internet connection is required.")

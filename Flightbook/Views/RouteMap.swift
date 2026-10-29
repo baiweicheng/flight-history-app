@@ -1,10 +1,34 @@
 import SwiftUI
 
-@Observable final class RouteMapState {
+@MainActor @Observable final class RouteMapState {
     var camera = MapCamera()
     var selected: String?
     var initialized = false
     var dataset = ""
+    @ObservationIgnored private var animation: Task<Void, Never>?
+
+    func stopAnimation() { animation?.cancel(); animation = nil }
+    func move(to target: MapCamera, animated: Bool) {
+        stopAnimation()
+        guard animated else { camera = target; return }
+        let start = camera
+        var end = target
+        // World copies are equivalent: animate across the nearest copy, never around the whole planet.
+        end.center.x -= (end.center.x - start.center.x).rounded()
+        animation = Task { [weak self] in
+            for step in 1...15 {
+                guard let self, !Task.isCancelled else { return }
+                let t = Double(step)/15, ease = t*t*(3-2*t)
+                var frame = start
+                frame.center.x += (end.center.x-start.center.x)*ease
+                frame.center.y += (end.center.y-start.center.y)*ease
+                frame.zoom = start.zoom * pow(end.zoom/start.zoom, ease)
+                self.camera = frame
+                do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
+            }
+            self?.camera = end; self?.animation = nil
+        }
+    }
 }
 
 private enum WorldGeometry {
@@ -56,7 +80,7 @@ struct RouteMap: View {
                 if interactive {
                     HStack(alignment: .bottom) {
                         Button {
-                            transition { state.selected = nil; fit(geometry, size: size) }
+                            state.selected = nil; fit(geometry, size: size, animated: true)
                         } label: { Label("Focus routes", systemImage: "arrow.up.left.and.arrow.down.right").font(.subheadline.weight(.medium)).padding(.horizontal, 13).frame(minHeight: 44) }
                             .buttonStyle(.plain).background(reduceTransparency ? AnyShapeStyle(Palette.surface) : AnyShapeStyle(.regularMaterial), in: Capsule())
                             .accessibilityIdentifier("focusRoutes")
@@ -76,7 +100,7 @@ struct RouteMap: View {
                 }
                 .onChange(of: signature) { _, _ in state.initialized = false; state.selected = nil; initialize(geometry, size: size) }
                 .onChange(of: state.selected) { _, selected in
-                    if let selected, let path = geometry.first(where: { $0.id == selected }) { transition { fit([path], size: size) } }
+                    if let selected, let path = geometry.first(where: { $0.id == selected }) { fit([path], size: size, animated: true) }
                 }
                 .onChange(of: state.initialized) { _, value in if !value { initialize(geometry, size: size) } }
         }
@@ -87,23 +111,27 @@ struct RouteMap: View {
         let selected = paths.filter { $0.id == state.selected }
         fit(selected.isEmpty ? paths : selected, size: size)
     }
-    private func fit(_ paths: [RoutePath], size: CGSize) {
-        state.camera.fit(paths.flatMap(\.points), width: size.width, height: size.height, bottomInset: interactive ? 90 : 35)
+    private func fit(_ paths: [RoutePath], size: CGSize, animated: Bool = false) {
+        var target = state.camera
+        target.fit(paths.flatMap(\.points), width: size.width, height: size.height, bottomInset: interactive ? 90 : 35)
+        state.move(to: target, animated: animated && interactive && !reduceMotion)
     }
-    private func transition(_ work: () -> Void) { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22), work) }
     private func select(_ path: RoutePath, size: CGSize) {
-        transition { state.selected = path.id; fit([path], size: size) }
+        if state.selected == path.id { fit([path], size: size, animated: true) }
+        else { state.selected = path.id }
     }
     private func zoomButton(_ title: String, icon: String, factor: Double, size: CGSize) -> some View {
         Button {
-            transition { state.camera.zoom(by: factor, anchor: MapPoint(x: size.width/2, y: size.height/2), width: size.width, height: size.height) }
-        } label: { Image(systemName: icon).font(.headline).frame(width: 44, height: 44) }
+            var target = state.camera
+            target.zoom(by: factor, anchor: MapPoint(x: size.width/2, y: size.height/2), width: size.width, height: size.height)
+            state.move(to: target, animated: !reduceMotion)
+        } label: { Image(systemName: icon).font(.headline).frame(width: 44, height: 44).contentShape(Rectangle()) }
             .buttonStyle(.plain).accessibilityLabel(title).accessibilityIdentifier(title == "Zoom in" ? "zoomIn" : "zoomOut")
     }
     private func drag(_ size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 6).onChanged { value in
             guard pinchStart == nil else { return }
-            if dragStart == nil { dragStart = state.camera }
+            if dragStart == nil { state.stopAnimation(); dragStart = state.camera }
             guard let start = dragStart else { return }
             state.camera.center.x = start.center.x - value.translation.width / (size.width * start.zoom)
             state.camera.center.y = start.center.y - value.translation.height / (size.width * start.zoom)
@@ -115,7 +143,7 @@ struct RouteMap: View {
     }
     private func pinch(_ size: CGSize) -> some Gesture {
         MagnifyGesture().onChanged { value in
-            if pinchStart == nil { pinchStart = state.camera; dragStart = nil }
+            if pinchStart == nil { state.stopAnimation(); pinchStart = state.camera; dragStart = nil }
             guard let start = pinchStart else { return }
             state.camera = start
             state.camera.zoom(by: value.magnification, anchor: MapPoint(x: value.startLocation.x, y: value.startLocation.y), width: size.width, height: size.height)

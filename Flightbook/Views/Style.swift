@@ -30,30 +30,33 @@ struct PageHeader: View {
 struct MetricsCard: View {
     let stats: Statistics
     let unit: DistanceUnit
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .largeTitle) private var distanceSize = 45
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Label("Total route distance", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
                 .font(.subheadline).foregroundStyle(.secondary)
-            Text(unit.format(stats.distanceKM)).font(.system(size: distanceSize, weight: .medium, design: .rounded))
-                .minimumScaleFactor(0.55).lineLimit(1).foregroundStyle(Palette.accent)
-                .accessibilityIdentifier("totalDistance")
-            Divider()
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 12) { metrics }
-                VStack(alignment: .center, spacing: 18) { metrics }
+            if dynamicTypeSize.isAccessibilitySize {
+                Text(unit.format(stats.distanceKM)).font(.largeTitle.weight(.medium))
+                    .fixedSize(horizontal: false, vertical: true).foregroundStyle(Palette.accent).accessibilityIdentifier("totalDistance")
+            } else {
+                Text(unit.format(stats.distanceKM)).font(.system(size: distanceSize, weight: .medium, design: .rounded))
+                    .minimumScaleFactor(0.55).lineLimit(1).foregroundStyle(Palette.accent).accessibilityIdentifier("totalDistance")
             }
+            Divider()
+            if dynamicTypeSize.isAccessibilitySize { VStack(spacing: 22) { metrics } }
+            else { HStack(alignment: .top, spacing: 12) { metrics } }
         }.surface()
     }
     @ViewBuilder private var metrics: some View {
-        metric("\(stats.flights.count)", "flights")
-        metric(durationText(stats.minutes), stats.estimatedCount == stats.flights.count ? "est. airborne time" : "airborne time*")
-        metric("\(stats.airportCount)", "airports")
+        metric("\(stats.flights.count)", "flights").accessibilityIdentifier("metricFlights")
+        metric(durationText(stats.minutes), stats.estimatedCount == stats.flights.count ? "est. airborne time" : stats.estimatedCount > 0 ? "airborne time*" : "airborne time").accessibilityIdentifier("metricTime")
+        metric("\(stats.airportCount)", "airports").accessibilityIdentifier("metricAirports")
     }
     private func metric(_ number: String, _ label: String) -> some View {
         VStack(spacing: 6) {
-            Text(number).font(.title3.weight(.semibold)).fixedSize(horizontal: true, vertical: false)
-            Text(label).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: true, vertical: false)
+            Text(number).font(.title3.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+            Text(label).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }.frame(maxWidth: .infinity).multilineTextAlignment(.center).accessibilityElement(children: .combine)
     }
 }

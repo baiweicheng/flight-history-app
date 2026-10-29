@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Convert the approved Natural Earth / atlas reference into native Mercator rings."""
-import json, re, math
+"""Convert a Natural Earth / atlas TopoJSON file (or reference HTML) into native Mercator rings."""
+import json, re, math, sys
 from pathlib import Path
-html=Path('.project-context/design/flight-history-ui.html').read_text()
-topo=json.loads(re.search(r'<script[^>]+id="fh-world-data"[^>]*>(.*?)</script>', html, re.S).group(1))
+if len(sys.argv) != 2:
+    raise SystemExit('Usage: python3 Scripts/prepare_world.py /path/to/countries-110m.json (or reference.html)')
+source=Path(sys.argv[1]).read_text()
+embedded=re.search(r'<script[^>]+id="fh-world-data"[^>]*>(.*?)</script>', source, re.S)
+topo=json.loads(embedded.group(1) if embedded else source)
 sx,sy=topo['transform']['scale']; tx,ty=topo['transform']['translate']
 arcs=[]
 for arc in topo['arcs']:

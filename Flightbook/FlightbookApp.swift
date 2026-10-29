@@ -4,6 +4,7 @@ import SwiftUI
     private let store: FlightStore?
     private let startupError: String?
     init() {
+        Preferences.prepareTestSession()
         do {
             let loaded = try FlightStore()
             #if DEBUG
