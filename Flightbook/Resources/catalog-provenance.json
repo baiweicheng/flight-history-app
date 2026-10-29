@@ -1,0 +1,9 @@
+{
+  "source": "https://ourairports.com/data/",
+  "download": "https://davidmegginson.github.io/ourairports-data/airports.csv",
+  "retrieved": "2026-10-28",
+  "version": "OurAirports-2026-10-28",
+  "records": 86293,
+  "license": "Public domain",
+  "sourceSHA256": "9c1f3295b59f84c475f8c8555fa102505d7b4af0f931002cc5558dfeee1e43aa"
+}

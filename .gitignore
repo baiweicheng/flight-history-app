@@ -1,0 +1,11 @@
+# Local project instructions, discussion memory, planning, and design references.
+/.project-context/
+/AGENTS.md
+
+# Local build and test products.
+/.build/
+/DerivedData/
+/TestResults/
+*.xcuserstate
+xcuserdata/
+.DS_Store
