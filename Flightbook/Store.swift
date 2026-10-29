@@ -62,6 +62,7 @@ typealias FlightRecord = FlightbookSchemaV1.FlightRecord
         guard let deleted else { return }
         try save(deleted); self.deleted = nil
     }
+    func dismissUndo() { deleted = nil }
     private func records() throws -> [FlightRecord] { try container.mainContext.fetch(FetchDescriptor<FlightRecord>()) }
     private func transaction(_ changes: () throws -> Void) throws {
         do { try changes(); try container.mainContext.save(); try reload() }

@@ -32,6 +32,7 @@ for name in targets:
         settings={'PRODUCT_NAME':'$(TARGET_NAME)','PRODUCT_BUNDLE_IDENTIFIER':'com.baiweicheng.flightbook'+('' if name==app else '.'+name),
                   'SWIFT_VERSION':'6.0','IPHONEOS_DEPLOYMENT_TARGET':'26.0','TARGETED_DEVICE_FAMILY':'1',
                   'GENERATE_INFOPLIST_FILE':'YES','CODE_SIGN_STYLE':'Automatic','SWIFT_STRICT_CONCURRENCY':'complete',
+                  'SWIFT_ACTIVE_COMPILATION_CONDITIONS':'DEBUG' if config=='Debug' else '',
                   'SWIFT_OPTIMIZATION_LEVEL':'-Onone' if config=='Debug' else '-O','ENABLE_TESTABILITY':'YES' if config=='Debug' else 'NO'}
         if name==app: settings.update({'INFOPLIST_KEY_CFBundleDisplayName':'Flightbook','INFOPLIST_KEY_UILaunchScreen_Generation':'YES',
             'INFOPLIST_KEY_UISupportedInterfaceOrientations':'UIInterfaceOrientationPortrait',

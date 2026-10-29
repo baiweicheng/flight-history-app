@@ -4,7 +4,13 @@ import SwiftUI
     private let store: FlightStore?
     private let startupError: String?
     init() {
-        do { store = try FlightStore(); startupError = nil }
+        do {
+            let loaded = try FlightStore()
+            #if DEBUG
+            try UATSupport.seed(loaded)
+            #endif
+            store = loaded; startupError = nil
+        }
         catch { store = nil; startupError = error.localizedDescription }
     }
     var body: some Scene {
